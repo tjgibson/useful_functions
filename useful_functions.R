@@ -7,7 +7,7 @@
 # deeptools computeMatrix wrapper
 dt_compute_matrix <- function(mode, region_files, score_files, matrix_file,run_command = FALSE, ...) {
   require(tidyverse)
-  command <- paste("/Users/Tyler/anaconda2/bin/computeMatrix", mode,
+  command <- paste("/Users/tylergibson/opt/miniconda3/envs/dt_env/bin/computeMatrix", mode,
                    "-R", str_c(region_files, collapse = " "),
                    "-S", str_c(score_files, collapse = " "),
                    "-o", matrix_file)
@@ -24,7 +24,7 @@ dt_compute_matrix <- function(mode, region_files, score_files, matrix_file,run_c
 # deeptools plotHeatmap wrapper
 dt_plot_heatmap <- function(matrix, out_file,run_command = FALSE, ...) {
   require(tidyverse) 
-  command <- paste("/Users/Tyler/anaconda2/bin/plotHeatmap",
+  command <- paste("/Users/tylergibson/opt/miniconda3/envs/dt_env/bin/plotHeatmap",
                    "-m", matrix,
                    "-out", out_file)
   
@@ -143,4 +143,36 @@ zscore_bw <- function(bw) {
   seqinfo(all_bins) <- seqinfo(bw)
   
   return(all_bins)
+}
+
+#functions for processing peaks (e.g. ChIP-seq, ATAC-seq) ----------------------
+
+# function to plot the cumulative distribution function for a set of peaks
+# takes as input a character vector of paths to MACS2 output files files (e.g. macs2_peaks.xls)
+# if the elements of the character vector are named, these names will be used to label the plot. If not, the filename will be used.
+plot_peak_ECDF <- function(in_files, return_plot = FALSE) {
+  require(tidyverse)
+  # check input file
+  if (any(!file.exists(in_files))) {
+    stop("narrowPeak file not found")
+  }
+  
+  # set sample names
+  if(is.null(names(in_files))) {
+    names(in_files) <- str_replace(basename(in_files), "xls", "")
+  }
+  
+  # import peak files 
+  all_peaks <- in_files %>%
+    map(read_tsv, comment = "#") %>%
+    bind_rows(.id = "sample")
+  
+  # plot ECDF function
+  p <- all_peaks %>%
+    ggplot(aes(log2(fold_enrichment), color = sample)) + 
+    stat_ecdf() 
+  
+  print(p)
+  
+  if (return_plot) {return(p)}
 }
