@@ -1,10 +1,144 @@
+# functions for reading peak files =============================================
+# takes a character vector with paths to one or more bed files
+# if input is one path, reads bed file into a Granges object
+# if input is multiple paths, reads bed files into GrangesList
+read_peaks_bed <- function(files, ...) {
+  require(rtracklayer)
+  require(tidyverse)
+  require(GenomicRanges)
+  
+  # check input
+  if (!is.character(files)) stop("files should be a character vector")
+  
+  if (!all(file.exists(files))) stop("one or more input files not found")
+  
+  if (!all(str_detect(files, ".bed$"))) warning(".bed file extension missing from one or more files. Check input file format.")
+  
+  # set names
+  if(is.null(names(files))) {
+    names(files) <- str_replace(basename(files), ".bed", "")
+  }
+  
+  # read a single bed file
+  if (length(files) == 1) {
+    gr <- rtracklayer::import(files, ...)
+    return(gr)
+  }
+  
+  # read multiple bed files
+  if (length(files) > 1) {
+    gr <- files %>%
+      map(rtracklayer::import, ...) %>%
+      GenomicRanges::GRangesList()
+    return(gr)
+  }
+}
+
+# takes a character vector with paths to one or more xls files produced by MACS
+# if input is one path, reads bed file into a Granges object
+# if input is multiple paths, reads bed files into GrangesList
+read_peaks_xls <- function(files, use_summits = FALSE) {
+  require(tidyverse)
+  require(GenomicRanges)
+  
+  # check input
+  if (!is.character(files)) stop("files should be a character vector")
+  
+  if (!all(file.exists(files))) stop("one or more input files not found")
+  
+  if (!all(str_detect(files, ".xls$"))) warning(".xls file extension missing from one or more files. Check input file format.")
+  
+  # set names
+  if(is.null(names(files))) {
+    names(files) <- str_replace(basename(files), ".xls", "")
+  }
+  
+  
+  # read xls files
+  if (!use_summits) {
+    gr <- files %>%
+      map(read_tsv, comment = "#") %>% 
+      map(makeGRangesFromDataFrame, keep.extra.columns = TRUE) %>% 
+      GRangesList()
+    
+  } else {
+    # read xls files using peak summits
+    gr <- files %>%
+      map(read_tsv, comment = "#") %>% 
+      map(select, -c("start", "end")) %>%
+      map(makeGRangesFromDataFrame, start.field = "abs_summit", end.field = "abs_summit", keep.extra.columns = TRUE) %>%
+      GRangesList()
+  }
+  # reutrn output file
+  if (length(files) == 1) return(unlist(gr))
+  
+  if (length(files) > 1) return(gr)
+  
+}
+
+# takes a character vector with paths to one or more narrowPeak files
+# if input is one path, reads bed file into a Granges object
+# if input is multiple paths, reads bed files into GrangesList
+read_peaks_narrowPeak <- function(files) {
+  require(tidyverse)
+  require(GenomicRanges)
+  
+  # check input
+  if (!is.character(files)) stop("files should be a character vector")
+  
+  if (!all(file.exists(files))) stop("one or more input files not found")
+  
+  if (!all(str_detect(files, ".narrowPeak$"))) warning(".narrowPeak file extension missing from one or more files. Check input file format.")
+  
+  # set names
+  if(is.null(names(files))) {
+    names(files) <- str_replace(basename(files), ".narrowPeak", "")
+  }
+  
+  
+  # read narrowPeak files
+    gr <- files %>%
+      map(read_tsv, 
+          col_names = c("chrom", "start", "end", "name", "score", "strand", "signalValue", "pValue", "qValue", "peak"), 
+          col_types = c("ciicncnnni")) %>% 
+      map(makeGRangesFromDataFrame, keep.extra.columns = TRUE) %>% 
+      GRangesList()
+    
+  
+
+  # reutrn output file
+  if (length(files) == 1) return(unlist(gr))
+  
+  if (length(files) > 1) return(gr)
+  
+}
+
 
 #functions for processing peaks (e.g. ChIP-seq, ATAC-seq) ----------------------
 # function to extend peak summits of Granges object
-extend_summits <- function(summits_granges, upstream=100, downstream=100) {
-  start(summits_granges) <- start(summits_granges) - abs(upstream)
-  end(summits_granges) <- end(summits_granges) + abs(downstream)
-  return(summits_granges)
+extend_summits <- function(x, upstream=100L, downstream=100L) {
+  require(GenomicRanges)
+  
+  # check input
+  if (!(inherits(x, "GRanges") | inherits(x, "GRangesList"))) {
+    stop("x must be a GRanges or GRangesList")
+  }
+  
+  
+  
+  if (!is.integer(upstream)) {
+    stop("upstream must be an integer")
+  }
+  
+  if (!is.integer(downstream)) {
+    stop("downstream must be an integer")
+  }
+  
+  
+  
+  start(x) <- start(x) - abs(upstream)
+  end(x) <- end(x) + abs(downstream)
+  return(x)
 }
 
 
@@ -22,9 +156,8 @@ combine_peaks <- function(peaks, method = "overlap", min_overlap = 1L) {
     stop("Only one set of peaks provided. For merging peaks, provide multiple peak sets.")
   }
   
-  
   if (!inherits(peaks, "GRangesList") ) {
-    stop("one or more peak set is not a Granges object. peaks must be a list of Granges objects")
+    stop("one or more peak set is not a Granges object. peaks must be a GRangesList")
   }
   
   if (!any(method == c("overlap", "merge"))) {
@@ -55,149 +188,94 @@ combine_peaks <- function(peaks, method = "overlap", min_overlap = 1L) {
   
 }
 
-# function to filter ChIP peaks to include only those peaks detected in multiple replicates
-# peaks should be a character vector of file paths or a GrangesList object
-# if peaks is a list of file paths, files should be bed files or the xls files produced by MACS2 (not a combination of the two)
-# method should be either overlap or merge
-# enrichment threshold should only be provided if files are xls files produced by MACS2
-filter_peaks <- function(peaks, method = "overlap", min_overlap = 1L, output = "filtered_peaks", extend_summits = FALSE, extend_upstream = 100L, extend_downstream = 100L, enrichment_threshold = NULL) {
-  require(tidyverse)
-  require(GenomicRanges)
-  require(rtracklayer)
+# function to build an overlap table
+# takes a Granges list object
+# combines all nonoverlapping peaks from all samples, then builds a logical table indicating which peaks from each sample overlap each peak on the master list
+peak_overlap_table <- function(peaks, method = "overlap", min_overlap = 1L, keep_extra_cols = FALSE) {
   
-  # check input
+  # check arguments
   if (length(peaks) < 2) {
     stop("Only one set of peaks provided. For merging peaks, provide multiple peak sets.")
   }
   
-  if (is.character(peaks)) {
-    if (any(!file.exists(peaks))) {
-      stop("one or more files not found")
-    }
-    
-    if (all(str_detect(peaks, ".bed$"))) {
-      input_format = "bed"
-    }
-    else if (all(str_detect(peaks, ".xls$"))) {
-      input_format = "macs_xls"
-    } else {
-      stop("If 'peaks' is a character vector, it should contain a list of bed files or xls files produced by MACS2. All files must be of one type, not a mixture of the two.")
-    }
-    
-  }
-  else if (!inherits(peaks, "GRangesList") ) {
-    stop("one or more peak set is not a Granges object. peaks must be a list of Granges objects")
-  }
-  else {
-    input_format = "GrangesList"
+  if (!inherits(peaks, "GRangesList") ) {
+    stop("one or more peak set is not a Granges object. peaks must be a GRangesList")
   }
   
   if (!any(method == c("overlap", "merge"))) {
     stop("Invalid method provided. method should be 'overlap' or 'merge' ")
   }
   
-  if (!any(output == c("filtered_peaks", "overlap_table"))) {
-    stop("Invalid 'output' provided. 'output' should be 'filtered_peaks' or 'overlap_table' ")
-  }
-  
-  
   if (!is_integer(min_overlap)) {
     stop("min_overlap must be an integer")
   }
   
-  if (!is.null(enrichment_threshold) & (input_format != "macs_xls")) {
-    stop("enrichment_threshold argument should only be specified if 'peaks is a list of xls files from MACS2'")
+  
+  # set names
+  if(is.null(names(peaks))) {
+    names(peaks) <- paste0("sample_", seq((peaks)))
   }
   
-  
-  # if a list of bed files is provided, import them to a GrangesList
-  if (input_format == "bed") {
-    # set sample names
-    if(is.null(names(peaks))) {
-      names(peaks) <- str_replace(basename(peaks), ".bed", "")
-    }
-    
-    # import bed files
-    peak_set_list <- peaks %>%
-      map(rtracklayer::import) %>%
-      GRangesList()
-    
-    if (extend_summits) {
-      peak_set_list <- peak_set_list %>%
-        extend_summits(upstream = extend_upstream, downstream = extend_downstream)
-    }
-  }
-  
-  # if a list of MACS2 XLS files is provided, import them and filter based on fold_enrichment, if necessary
-  if (input_format == "macs_xls") {
-    # set sample names
-    if(is.null(names(peaks))) {
-      names(peaks) <- str_replace(basename(peaks), ".xls", "")
-    }
-    
-    # import macs2 xls files
-    peak_set_list <- peaks %>%
-      purrr::map(read_tsv, comment = "#")
-    
-    if (!is.null(enrichment_threshold)) {
-      message("filtering peaks by fold enrichment")
-      peak_set_list <- peak_set_list %>%
-        map(dplyr::filter, fold_enrichment > enrichment_threshold)
-    }
-    if (extend_summits) {
-      message("extending summits")
-      peak_set_list <- peak_set_list %>%
-        purrr::map(select, 1, abs_summit, name) %>%
-        purrr::map(makeGRangesFromDataFrame, start.field = "abs_summit", end.field = "abs_summit", keep.extra.columns = TRUE) %>%
-        GenomicRanges::GRangesList() %>%
-        extend_summits(upstream = extend_upstream, downstream = extend_downstream)
-    }
-    else {
-      peak_set_list <- peak_set_list %>%
-        map(select, 1:3) %>%
-        map(makeGRangesFromDataFrame, keep.extra.columns = TRUE) %>%
-        GRangesList()
-    }
-  }
-  
-  if (input_format == "GrangesList") {
-    peak_set_list <- peaks
-    
-    if (extend_summits) {
-      peak_set_list <- peak_set_list %>%
-        extend_summits(upstream = extend_upstream, downstream = extend_downstream)
-    }
-  }
   
   # get a master set of all nonoverlapping peaks from all peak sets
-  all_peaks_gr <- combine_peaks(peak_set_list, method = method, min_overlap = min_overlap)
-  all_peaks_df <- as.data.frame(all_peaks_gr)
+  all_peaks_gr <- combine_peaks(peaks, method = method, min_overlap = min_overlap)
+  all_peaks_df <- as.data.frame(all_peaks_gr) %>%
+    {if(!keep_extra_cols) select(.,1:5) else .}
   
   # build a logical overlap table indicating which peaks were detected in which samples
-  for (i in 1:length(peak_set_list)) {
-    sample_name <- names(peak_set_list)[i]
-    i_peaks <- peak_set_list[[i]]
+  for (i in 1:length(peaks)) {
+    sample_name <- names(peaks)[i]
+    i_peaks <- peaks[[i]]
     
     all_peaks_df[,sample_name] <- FALSE
     overlaps <- findOverlaps(all_peaks_gr, i_peaks, minoverlap = min_overlap)@from
     all_peaks_df[overlaps,sample_name] <- TRUE
   }
+  return(all_peaks_df)
+}
+
+
+# function to filter ChIP peaks to include only those peaks detected in multiple replicates
+# peaks should be a GRangesList object
+# method should be either overlap or merge
+filter_by_replicates <- function(peaks, method = "overlap", min_overlap = 1L) {
+  require(tidyverse)
+  require(GenomicRanges)
   
-  if (output == "overlap_table") {
-    return(all_peaks_df)
+  # check input
+  if (length(peaks) < 2) {
+    stop("Only one set of peaks provided. For merging peaks, provide multiple peak sets.")
   }
   
+  if (!inherits(peaks, "GRangesList") ) {
+    stop("one or more peak set is not a Granges object. peaks must be a GrangesList")
+  }
+
+  if (!any(method == c("overlap", "merge"))) {
+    stop("Invalid method provided. method should be 'overlap' or 'merge' ")
+  }
+  
+  if (!is_integer(min_overlap)) {
+    stop("min_overlap must be an integer")
+  }
+  
+  # set names
+  if(is.null(names(peaks))) {
+    names(peaks) <- paste0("sample_", seq((peaks)))
+  }
+
+  # get table of peak overlaps
+  overlap_table <- peak_overlap_table(peaks, method = method, min_overlap = min_overlap)
+  keep_cols <- names(peaks)
+  
   # filter_peaks to include only those detected in all replicates
-  keep_cols <- names(peak_set_list)
-  filtered_peaks <- all_peaks_df %>%
+  filtered_peaks <- overlap_table %>%
     dplyr::mutate(keep = rowSums(select(., all_of(keep_cols)))) %>%
     dplyr::filter(keep == length(peaks)) %>%
     dplyr::select(-all_of(keep_cols)) %>%
     makeGRangesFromDataFrame(keep.extra.columns = TRUE)
   
-  if (output == "filtered_peaks") {
     return(filtered_peaks)
-  }
   
 }
 
