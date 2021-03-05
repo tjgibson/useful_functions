@@ -70,7 +70,7 @@ read_peaks_xls <- function(files, use_summits = FALSE) {
       GRangesList()
   }
   # reutrn output file
-  if (length(files) == 1) return(unlist(gr))
+  if (length(files) == 1) return(unlist(gr, use.names = FALSE))
   
   if (length(files) > 1) return(gr)
   
@@ -184,6 +184,7 @@ combine_peaks <- function(peaks, method = "overlap", min_overlap = 1L) {
     combined_peaks <- GenomicRanges::reduce(unlist(peaks))
     
   }
+  mcols(combined_peaks) <- NULL
   return(combined_peaks)
   
 }
@@ -191,7 +192,7 @@ combine_peaks <- function(peaks, method = "overlap", min_overlap = 1L) {
 # function to build an overlap table
 # takes a Granges list object
 # combines all nonoverlapping peaks from all samples, then builds a logical table indicating which peaks from each sample overlap each peak on the master list
-peak_overlap_table <- function(peaks, method = "overlap", min_overlap = 1L, keep_extra_cols = FALSE) {
+peak_overlap_table <- function(peaks, method = "overlap", min_overlap = 1L) {
   
   # check arguments
   if (length(peaks) < 2) {
@@ -220,7 +221,7 @@ peak_overlap_table <- function(peaks, method = "overlap", min_overlap = 1L, keep
   # get a master set of all nonoverlapping peaks from all peak sets
   all_peaks_gr <- combine_peaks(peaks, method = method, min_overlap = min_overlap)
   all_peaks_df <- as.data.frame(all_peaks_gr) %>%
-    {if(!keep_extra_cols) select(.,1:5) else .}
+    select(1:5)
   
   # build a logical overlap table indicating which peaks were detected in which samples
   for (i in 1:length(peaks)) {
@@ -272,7 +273,7 @@ filter_by_replicates <- function(peaks, method = "overlap", min_overlap = 1L) {
   filtered_peaks <- overlap_table %>%
     dplyr::mutate(keep = rowSums(select(., all_of(keep_cols)))) %>%
     dplyr::filter(keep == length(peaks)) %>%
-    dplyr::select(-all_of(keep_cols)) %>%
+    dplyr::select(-all_of(keep_cols), -keep) %>%
     makeGRangesFromDataFrame(keep.extra.columns = TRUE)
   
     return(filtered_peaks)
