@@ -12,6 +12,12 @@ file_to_gViz_track <- function(file, which = NULL, ...) {
 
   if (!str_detect(file, ".bed|.bw")) stop("Input should be bed file or bigWig file, correct file extensions not detected")
 
+  # check seq level style of input file. If not UCSC, change style of "which" to match target file
+  if (!is.null(which)) {
+  bwf <- BigWigFile(file)
+  seqlevelsStyle(which) <- seqlevelsStyle(seqinfo(bwf))
+  }
+  
   # for bigWig file, read file and create gViz data track
   if(str_detect(file, ".bw")) {
     track <- file %>%
@@ -76,7 +82,8 @@ plot_genome_tracks <- function(files, chromosome, start, end, track_names=NULL, 
 
   # generate track objects for each bigwig file
   region <- GRanges(chromosome, IRanges(start, end))
-
+  
+  # check seqinfo of 
     
   message("importing coverage from bigWig files")
 
