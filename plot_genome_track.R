@@ -12,14 +12,17 @@ file_to_gViz_track <- function(file, which = NULL, ...) {
 
   if (!str_detect(file, ".bed|.bw")) stop("Input should be bed file or bigWig file, correct file extensions not detected")
 
-  # check seq level style of input file. If not UCSC, change style of "which" to match target file
-  if (!is.null(which)) {
-  bwf <- BigWigFile(file)
-  seqlevelsStyle(which) <- seqlevelsStyle(seqinfo(bwf))
-  }
+
   
   # for bigWig file, read file and create gViz data track
   if(str_detect(file, ".bw")) {
+    # check seq level style of input file. If not UCSC, change style of "which" to match target file
+    # if (!is.null(which)) {
+    #   bwf <- BigWigFile(file)
+    #   seqlevelsStyle(which) <- seqlevelsStyle(seqinfo(bwf))
+    # }
+    # 
+    # import file
     track <- file %>%
       rtracklayer::import(which = which) %>%
       `seqlevelsStyle<-`("UCSC") %>%
@@ -29,6 +32,16 @@ file_to_gViz_track <- function(file, which = NULL, ...) {
 
   # for bed file, read file and create gViz annotation track
   if(str_detect(file, ".bed")) {
+    # check seq level style of input file. If not UCSC, change style of "which" to match target file
+    # if (!is.null(which)) {
+    #   head_gr <- file %>%
+    #     read_tsv(comment = "#", skip = 1, n_max = 5, col_names = c("chromosome", "start", "end")) %>%
+    #     makeGRangesFromDataFrame()
+    #   
+    #   seqlevelsStyle(which) <- seqlevelsStyle(seqinfo(head_gr))
+    # }
+    
+    # import file
     track <- file %>%
       rtracklayer::import(which = which) %>%
       `seqlevelsStyle<-`("UCSC") %>%
