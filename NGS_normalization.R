@@ -102,3 +102,13 @@ zscore_bw <- function(bw) {
   
   return(all_bins)
 }
+
+# collapse a GRanges object to merge regions with the same score
+collapse_gr <- function(gr) {
+  collapsed <- unlist(GenomicRanges::reduce(split(gr, ~score)))
+  collapsed$score <- as.numeric(names(collapsed))
+  names(collapsed) <- NULL
+  
+  return(collapsed)
+  
+}

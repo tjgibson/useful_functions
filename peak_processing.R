@@ -192,7 +192,7 @@ combine_peaks <- function(peaks, method = "overlap", min_overlap = 1L) {
 # function to build an overlap table
 # takes a Granges list object
 # combines all nonoverlapping peaks from all samples, then builds a logical table indicating which peaks from each sample overlap each peak on the master list
-peak_overlap_table <- function(peaks, method = "overlap", min_overlap = 1L) {
+peak_overlap_table <- function(peaks, method = "overlap", min_overlap = 1L, combine_peaks = TRUE) {
   
   # check arguments
   if (length(peaks) < 2) {
@@ -218,8 +218,13 @@ peak_overlap_table <- function(peaks, method = "overlap", min_overlap = 1L) {
   }
   
   
+  if (combine_peaks) {
   # get a master set of all nonoverlapping peaks from all peak sets
   all_peaks_gr <- combine_peaks(peaks, method = method, min_overlap = min_overlap)
+  
+  } else {
+    all_peaks_gr <- peaks[[1]]
+  }
   all_peaks_df <- as.data.frame(all_peaks_gr) %>%
     select(1:5)
   

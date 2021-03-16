@@ -166,4 +166,143 @@ plot_genome_tracks <- function(files, chromosome, start, end, track_names=NULL, 
 
 }
 
+# functions for plotting deeptools-style heatmaps
+plot_heatmap <- function(bw, regions, extend = 5000,row_split = NULL,order_by = NULL ,brewer_pal = "Greens",scale_group = NULL,individual_scales = FALSE, ...) {
+  require(rtracklayer)
+  require(GenomicRanges)
+  require(tidyverse)
+  require(EnrichedHeatmap)
+  require(RColorBrewer)
+  
+  # check arguments
+  if (!is.character(bw)) stop("bw should be a character vector")
+  
+  if (!all(file.exists(bw))) stop("one or more input files not found")
+  
+  if (any(!str_detect(bw, ".bw$"))) stop("bw file extension missing from one or more files, check input file formats")
+  
+  
+  if (!is.null(scale_group)) {
+    if (!is.numeric(scale_group)) stop("scale_group should be a numeric vector")
+    if (length(scale_group) != 1 | length(scale_group) != length(bw)) stop("scale_group should be a single number or a list of numbers of the same length as bw")
+  }
+  
+  # get sample names
+  if (is.null(names(bw))) {
+    names(bw) <- str_replace(basename(bw), ".bw", "")
+  }
+  
+  # define regions to import
+  import_regions <- regions
+  GenomicRanges::start(import_regions) <- GenomicRanges::start(import_regions) - extend
+  GenomicRanges::end(import_regions) <- GenomicRanges::end(import_regions) + extend
+  
+  
+  # import regions
+  message("constructing coverage matrix from bigwig files")
+  mat_list <- bw %>%
+    map(rtracklayer::import, which = import_regions) %>% 
+    map(normalizeToMatrix, target = regions, extend = extend, value_column = "score", 
+        mean_mode = "absolute", w = 10, 
+        smooth = TRUE,
+        keep = c(0.01, 0.98))
+  
+  # get row order
+  if(is.null(order_by)) {
+    order <- mat_list %>% 
+      map(as.data.frame) %>% 
+      bind_cols %>% 
+      rowMeans() %>% 
+      order(decreasing = TRUE)
+  } else if (length(order_by) == 1) {
+    order <- mat_list[[order_by]] %>% 
+      rowMeans() %>% 
+      order(decreasing = TRUE)
+  } else {
+    order <- mat_list[[order_by]] %>% 
+      map(as.data.frame) %>%
+      bind_cols() %>%
+      rowMeans() %>% 
+      order(decreasing = TRUE)
+  }
+  
+  # get color scale for heatmaps
+  if (!individual_scales) {
+  col_min <- mat_list %>%
+    map(na.exclude) %>%
+    map(min) %>%
+    unlist() %>%
+    min()
+  
+  col_max <- mat_list %>%
+    map(na.exclude) %>%
+    map(max) %>%
+    unlist() %>%
+    max()
+  
+  col_fun <- circlize::colorRamp2(seq(col_min, col_max, length.out = 9), brewer.pal(9, brewer_pal))
+  
+  } 
+  
+  # construct heatmap_list object
+  hm_list <- NULL
+  
+  for (i in seq_along(mat_list)) {
+    # in individual_scales and/or scale_group is set, determine separate scale for individual heatmaps or groups of heatmaps
+    if (individual_scales) {
+      col_fun <- circlize::colorRamp2(seq(min(na.exclude(mat_list[[i]])), max(na.exclude(mat_list[[i]])), length.out = 9), brewer.pal(9, brewer_pal))
+    } 
+    
+    if (!is.null(scale_group)) {
+      if (individual_scales) {
+        warning("scale_groups and individual_scales are both set. scale_groups will override individual_scales for determining color scales")
+      }
+      
+      if (length(scale_group == length(mat_list))) {
+        col_list <- list()
+        for (i in unique(scale_group)) {
+          
+          group_i <- which(scale_group == i)
+          
+          col_min <- mat_list[group_i] %>%
+            map(na.exclude) %>%
+            map(min) %>%
+            unlist() %>%
+            min()
+          
+          col_max <- mat_list[group_i] %>%
+            map(na.exclude) %>%
+            map(max) %>%
+            unlist() %>%
+            max()
+          
+          
+          
+          col_fun <-  circlize::colorRamp2( seq(col_min, col_max, length.out = 9), brewer.pal(9, brewer_pal))()
+        }
+        
+      } else {
+        col_fun <- circlize::colorRamp2(seq(min(na.exclude(mat_list[[scale_group]])), max(na.exclude(mat_list[[scale_group]])), length.out = 9), brewer.pal(9, brewer_pal))
+      }
+      
+    } 
+
+    
+    # add heatmap to list
+    message("creating heatmap for sample ", i)
+    hm_list <- hm_list + EnrichedHeatmap(mat_list[[i]],  col = col_fun,
+                                         row_split = row_split,
+                                         row_title_rot = 0,
+                                         pos_line = FALSE, 
+                                         row_order = order,
+                                         column_title = names(bw)[i], 
+                                         name = names(bw)[i],
+                                         ...)
+    
+  }
+  
+  
+  print(hm_list)
+  
+}
 
