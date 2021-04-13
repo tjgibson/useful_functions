@@ -238,6 +238,7 @@ plot_heatmap <- function(bw, regions,
                          min_percentile = 0.01,
                          max_percentile = 0.98,
                          smooth_heatmap = FALSE,
+                         row_order = NULL,
                          ...) {
   require(rtracklayer)
   require(GenomicRanges)
@@ -288,6 +289,7 @@ plot_heatmap <- function(bw, regions,
 
   
   # get row order
+  if (is.null(row_order)) {
   if(is.null(order_by_samples)) {
     order <- mat_list %>% 
       map(as.data.frame) %>% 
@@ -304,6 +306,9 @@ plot_heatmap <- function(bw, regions,
       bind_cols() %>%
       rowMeans() %>% 
       order(decreasing = TRUE)
+  }
+  } else {
+    order  <- row_order
   }
   
   # # apply gaussian smoothing
@@ -343,7 +348,7 @@ plot_heatmap <- function(bw, regions,
   # set legend
   if (!is.null(row_split)) {
     n_groups <- seq_along(unique(row_split))
-    lgd = Legend(at = unique(row_split), title = "Group", 
+    lgd = Legend(at = sort(unique(row_split)), title = "Group", 
                  type = "lines", legend_gp = gpar(col = n_groups))
   } else {
     n_groups <- 1
