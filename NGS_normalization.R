@@ -28,7 +28,8 @@ rpkm <- function(count_table, widths) {
 # define function for IP/input normalized bigwig files
 # function takes as input two bigwig files corresponding to input and IP from a ChIP experiment
 # the function returns a GRanges object with the IP/input ratio
-normalize_bigwigs <- function(input_file, IP_file, psuedocount = 0.01) {
+# by default, the function will perform CPM normalization on both bw files prior to computing the ratio. Disable if files are already count normalized.
+normalize_bigwigs <- function(input_file, IP_file, psuedocount = 0.01, cpm_normalize = TRUE) {
   # set dependencies
   require(GenomicRanges)
   require(rtracklayer)
@@ -50,6 +51,13 @@ normalize_bigwigs <- function(input_file, IP_file, psuedocount = 0.01) {
   
   overlaps <- findOverlaps(all_intervals, IP_gr)
   all_intervals$IP_depth[overlaps@from] <- IP_gr$score[overlaps@to]
+  
+  # perform CPM normalization of files
+  if (cpm_normalize) {
+    all_intervals$IP_depth <- all_intervals$IP_depth / sum(all_intervals$IP_depth)
+    all_intervals$input_depth <- all_intervals$input_depth / sum(all_intervals$input_depth)
+    
+  }
   
   # compute IP/ input ratio
   message("computing IP / input ratio")
@@ -77,7 +85,7 @@ zscore_bw <- function(bw) {
   # for large regions with the same score, expand into equal sized bins
   message("binning genome")
   min_binsize <- min(width(bw))
-  all_bins <- tileGenome(seqinfo(bw), tilewidth=10,cut.last.tile.in.chrom=TRUE)
+  all_bins <- tileGenome(seqinfo(bw), tilewidth=min_binsize,cut.last.tile.in.chrom=TRUE)
   
   message("getting scores for all bins")
   # add the coverage/score for both input and IP
