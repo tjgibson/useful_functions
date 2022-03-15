@@ -226,7 +226,7 @@ peak_overlap_table <- function(peaks, method = "overlap", min_overlap = 1L, comb
     all_peaks_gr <- peaks[[1]]
   }
   all_peaks_df <- as.data.frame(all_peaks_gr) %>%
-    select(1:5)
+    dplyr::select(1:5)
   
   # build a logical overlap table indicating which peaks were detected in which samples
   for (i in 1:length(peaks)) {
@@ -327,4 +327,58 @@ plot_peak_ECDF <- function(in_files, return_plot = FALSE) {
   print(p)
   
   if (return_plot) {return(p)}
+}
+
+# functions for plotting peak overlap network ----------------------------------
+# function to build adjacency matrix of peaks overlap
+# peaks should be a GrangesList object containing multiple peak sets to compare
+# min_overlap should be an integer specifying the minimum overlap in bp to consider two peaks as overlapping
+# type should be 'n' or 'percent' and specify whether the values in the adjacency matrix should be number of peaks or percentages
+peak_adj_matrix <- function(peaks, min_overlap = 1L, type = "n") {
+  # check arguments
+  if (length(peaks) < 2) {
+    stop("Only one set of peaks provided. For merging peaks, provide multiple peak sets.")
+  }
+  
+  if (!inherits(peaks, "GRangesList") ) {
+    stop("one or more peak set is not a Granges object. peaks must be a GRangesList")
+  }
+  
+  if (!is_integer(min_overlap)) {
+    stop("min_overlap must be an integer")
+  }
+  
+  if (!any(type == c("n", "percent"))) {
+    stop("Invalid type provided. type should be 'n' or 'percent' ")
+  }
+  
+  # build adjacency matrix
+  overlap_table_n <- matrix(0, ncol=length(peaks), nrow = length(peaks))
+  colnames(overlap_table_n) <- names(peaks)
+  rownames(overlap_table_n) <- names(peaks)
+  overlap_table_p <- overlap_table_n
+  
+  # compute overlap between all combinations of peak sets and store overlap in tables
+  for (i in seq(peaks)) {
+    for (j in seq(peaks)) {
+      i.gr <- peaks[[i]]
+      j.gr <- peaks[[j]]
+      
+      n_overlapping <- length(subsetByOverlaps(i.gr, j.gr, minoverlap = min_overlap))
+      p_overlapping <- length(subsetByOverlaps(i.gr, j.gr, minoverlap = min_overlap)) / length(i.gr)
+      
+      overlap_table_n[i,j] <- n_overlapping
+      overlap_table_p[i,j] <- p_overlapping
+    }
+    
+    
+  }
+  # return adjacency matrix
+  if (type == "n") {
+    return(overlap_table_n)
+  }
+  
+  if (type == "percent") {
+    return(overlap_table_p)
+  }
 }

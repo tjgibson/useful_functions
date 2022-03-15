@@ -55,8 +55,8 @@ normalize_bigwigs <- function(input_file, IP_file, psuedocount = 0.01, cpm_norma
   # perform CPM normalization of files
   message("performing CPM normalization")
   if (cpm_normalize) {
-    all_intervals$IP_depth <- all_intervals$IP_depth / sum(all_intervals$IP_depth)
-    all_intervals$input_depth <- all_intervals$input_depth / sum(all_intervals$input_depth)
+    all_intervals$IP_depth <- all_intervals$IP_depth / (sum(all_intervals$IP_depth) / 1e6)
+    all_intervals$input_depth <- all_intervals$input_depth / (sum(all_intervals$input_depth) / 1e6)
     
   }
   
