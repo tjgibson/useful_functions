@@ -37,33 +37,12 @@ coverage_matrix <- function(file,regions, upstream = 1000, downstream = 1000, re
   return(coverage_matrix)
 }
 
-# function for gaussian smoothing of heatmap. Function taken from heatmaps package. Core gaussian smoothing functionality is from EBImage package
-gaussianFilter = function(mat, sigma = c(3,3), output.size = dim(mat)) {
-  require(EBImage)
-  require(heatmaps)
-  makeGaussian2D = function(sigma) {
-    dim = sigma*3
-    x = -dim[1]:dim[1]
-    y = -dim[2]:dim[2]
-    x_d = vapply(x, dnorm, numeric(1), sd=sigma[1])
-    y_d = vapply(y, dnorm, numeric(1), sd=sigma[2])
-    brush = outer(x_d, y_d)
-    brush
-  }
-  message("\nApplying Gaussian blur...")
-  brush = makeGaussian2D(sigma)
-  mat.new = filter2(mat, brush)
-  if (!all(output.size == dim(mat))) {
-    mat.new = resize(mat.new, output.size[1], output.size[2])
-  }
-  mat.new
-}
 
 plot_heatmap <- function(bw, regions, 
                          upstream = 1000, downstream = 1000, region_width = 1,
                          row_split = NULL,
                          order_by_samples = NULL ,
-                         brewer_pal = "Greens",
+                         colors = c("#440154FF", "#21908CFF", "#FDE725FF"),
                          scale_group = NULL,
                          individual_scales = FALSE, 
                          return_heatmap_list = FALSE,
@@ -170,7 +149,7 @@ plot_heatmap <- function(bw, regions,
     unlist() %>%
     max()
   
-  col_fun <- circlize::colorRamp2(seq(col_min, col_max, length.out = 9), brewer.pal(9, brewer_pal))
+  col_fun <- circlize::colorRamp2(seq(col_min, col_max, length.out = 9), colors)
   
   } 
   
@@ -190,7 +169,7 @@ plot_heatmap <- function(bw, regions,
   for (i in seq_along(mat_list)) {
     # in individual_scales and/or scale_group is set, determine separate scale for individual heatmaps or groups of heatmaps
     if (individual_scales) {
-      col_fun <- circlize::colorRamp2(seq(min(na.exclude(mat_list[[i]])), max(na.exclude(mat_list[[i]])), length.out = 9), brewer.pal(9, brewer_pal))
+      col_fun <- circlize::colorRamp2(seq(min(na.exclude(mat_list[[i]])), max(na.exclude(mat_list[[i]])), length.out = 9), colors)
     } 
     
     if (!is.null(scale_group)) {
@@ -217,11 +196,11 @@ plot_heatmap <- function(bw, regions,
           
           
           
-          col_fun <-  circlize::colorRamp2( seq(col_min, col_max, length.out = 9), brewer.pal(9, brewer_pal))
+          col_fun <-  circlize::colorRamp2( seq(col_min, col_max, length.out = 9), colors)
         
         
       } else {
-        col_fun <- circlize::colorRamp2(seq(min(na.exclude(mat_list[[scale_group]])), max(na.exclude(mat_list[[scale_group]])), length.out = 9), brewer.pal(9, brewer_pal))
+        col_fun <- circlize::colorRamp2(seq(min(na.exclude(mat_list[[scale_group]])), max(na.exclude(mat_list[[scale_group]])), length.out = 9), colors)
       }
       
     } 
@@ -260,7 +239,7 @@ plot_heatmap_minimal <- function(bw, regions,
                                  upstream = 1000, downstream = 1000, region_width = 1,
                                  row_split = NULL,
                                  order_by_samples = NULL ,
-                                 brewer_pal = "Greens",
+                                 colors = c("#440154FF", "#21908CFF", "#FDE725FF"),
                                  scale_group = NULL,
                                  individual_scales = FALSE, 
                                  return_heatmap_list = FALSE,
@@ -367,7 +346,7 @@ plot_heatmap_minimal <- function(bw, regions,
       unlist() %>%
       max()
     
-    col_fun <- circlize::colorRamp2(seq(col_min, col_max, length.out = 9), brewer.pal(9, brewer_pal))
+    col_fun <- circlize::colorRamp2(seq(col_min, col_max, length.out = length(colors)), colors)
     
   } 
   
@@ -377,7 +356,7 @@ plot_heatmap_minimal <- function(bw, regions,
   for (i in seq_along(mat_list)) {
     # in individual_scales and/or scale_group is set, determine separate scale for individual heatmaps or groups of heatmaps
     if (individual_scales) {
-      col_fun <- circlize::colorRamp2(seq(min(na.exclude(mat_list[[i]])), max(na.exclude(mat_list[[i]])), length.out = 9), brewer.pal(9, brewer_pal))
+      col_fun <- circlize::colorRamp2(seq(min(na.exclude(mat_list[[i]])), max(na.exclude(mat_list[[i]])), length.out = length(colors)), colors)
     } 
     
     if (!is.null(scale_group)) {
@@ -404,11 +383,11 @@ plot_heatmap_minimal <- function(bw, regions,
         
         
         
-        col_fun <-  circlize::colorRamp2( seq(col_min, col_max, length.out = 9), brewer.pal(9, brewer_pal))
+        col_fun <-  circlize::colorRamp2( seq(col_min, col_max, length.out = length(colors)), colors)
         
         
       } else {
-        col_fun <- circlize::colorRamp2(seq(min(na.exclude(mat_list[[scale_group]])), max(na.exclude(mat_list[[scale_group]])), length.out = 9), brewer.pal(9, brewer_pal))
+        col_fun <- circlize::colorRamp2(seq(min(na.exclude(mat_list[[scale_group]])), max(na.exclude(mat_list[[scale_group]])), length.out = length(colors)), colors)
       }
       
     } 
@@ -423,7 +402,7 @@ plot_heatmap_minimal <- function(bw, regions,
                                                  row_order = order,
                                                  cluster_rows = FALSE, 
                                                  cluster_columns = FALSE,
-                                                 row_title = rep("", times = length(unique(regions$class))),
+                                                 row_title = NULL,
                                                  ...)
     
   }
