@@ -25,12 +25,55 @@ setMethod("motif_ppm", "modisco_motif", function(x) x@PPM)
 setGeneric("motif_cwm", function(x) standardGeneric("motif_cwm"))
 setMethod("motif_cwm", "modisco_motif", function(x) x@CWM)
 
-
+# function to trim motif =======================================================
+# removes flanking bases with low information content
+trim_modisco_motif <- function(motif, trim_by, threshold = 0.25) {
+  require(universalmotif)
+  
+  # check that input object is modisco motif object
+  if (class(motif) != "modisco_motif") {stop("provided object is not a modisco_motif object")}
+  
+  # check that acceptable value is provided for trim_by argument
+  if (!(trim_by %in% c("IC", "contribution"))) {stop("trim_by should be set to 'IC' or. 'contribution'")}
+  
+  # Get bases above threshold based on information content
+  if(trim_by == "IC") {
+    icm <- universalmotif::convert_type(motif@PPM, "ICM")
+    pass_thresh <- colSums(icm@motif) > threshold
+  } 
+  
+  # Get bases above threshold based on contribution score
+  else if (trim_by == "contribution") {
+    max_contribution <- apply(abs(motif@CWM), 2, FUN = max)
+    fraction_max <- max_contribution / (max(max_contribution))
+    pass_thresh <- fraction_max > threshold
+  }
+  
+  # trim motif
+  pass_rle <- rle(pass_thresh)
+  keep_start <- ifelse(!pass_rle$values[1], pass_rle$lengths[1] + 1 , 1)
+  n_runs <- length(pass_rle$lengths)
+  keep_end <- ifelse(!pass_rle$values[n_runs], sum(pass_rle$lengths) - pass_rle$lengths[n_runs] , sum(pass_rle$lengths))
+  
+  ppm <- motif@PPM[,keep_start:keep_end]
+  cwm <- motif@CWM[,keep_start:keep_end]
+  
+  
+  # create new modisco motif object with trimmed motif
+  trimmed_motif <- modisco_motif(
+    name = motif@name, 
+    n_seqlets = motif@n_seqlets, 
+    consensus = paste0(colnames(ppm), collapse = ""),
+    PPM = ppm, 
+    CWM = cwm
+  )
+  
+  return(trimmed_motif)
+}
 
 # internal function to parse motif =============================================
-h5_to_motif <- function(modisco_pattern_list, trim = TRUE, IC_thresh = 0.25) {
+h5_to_motif <- function(modisco_pattern_list, trim = FALSE,trim_by = "IC", trim_thresh = 0.25) {
   require(stringr)
-  require(universalmotif)
   
   # extract pattern names and sort in order
   motif_names <- names(modisco_pattern_list) |> 
@@ -49,20 +92,6 @@ h5_to_motif <- function(modisco_pattern_list, trim = TRUE, IC_thresh = 0.25) {
     colnames(cwm) <- colnames(ppm)
     rownames(cwm) <- rownames(ppm)
     
-    # trim motif based on information content
-    if (trim) {
-      icm <- convert_type(UM_ppm, "ICM")
-      
-      IC_pass <- colSums(icm@motif) > IC_thresh
-      pass_rle <- rle(IC_pass)
-      keep_start <- ifelse(!pass_rle$values[1], pass_rle$lengths[1] + 1 , 1)
-      n_runs <- length(pass_rle$lengths)
-      keep_end <- ifelse(!pass_rle$values[n_runs], sum(pass_rle$lengths) - pass_rle$lengths[n_runs] , sum(pass_rle$lengths))
-      
-      ppm <- ppm[,keep_start:keep_end]
-      cwm <- cwm[,keep_start:keep_end]
-    }
-    
     
     # create motif object
     motif <- modisco_motif(
@@ -73,6 +102,10 @@ h5_to_motif <- function(modisco_pattern_list, trim = TRUE, IC_thresh = 0.25) {
       CWM = cwm
     )
     
+    if (trim) {
+      motif <- trim_modisco_motif(motif, trim_by = trim_by, threshold = trim_thresh)
+    }
+    
     motifs[[m]] <- motif
     
   }
@@ -80,7 +113,7 @@ h5_to_motif <- function(modisco_pattern_list, trim = TRUE, IC_thresh = 0.25) {
   }
 
 # parse modisco results file into list of motifs ===============================
-read_modisco_h5 <- function(file, neg_patterns = TRUE, trim = TRUE, IC_thresh = 0.1) {
+read_modisco_h5 <- function(file, neg_patterns = TRUE, trim = FALSE,trim_by = "IC", trim_thresh = 0.25) {
   require(rhdf5)
   require(tidyverse)
   
@@ -93,7 +126,7 @@ read_modisco_h5 <- function(file, neg_patterns = TRUE, trim = TRUE, IC_thresh = 
   # read motifs with positive contribution scores
   pos_patterns <- h5read(file, "/pos_patterns")
   names(pos_patterns) <- paste0("pos_", names(pos_patterns))
-  pos_motifs <- h5_to_motif(pos_patterns, trim = trim, IC_thresh = IC_thresh)
+  pos_motifs <- h5_to_motif(pos_patterns, trim = trim, trim_by = trim_by, trim_thresh = trim_thresh)
   
   # read motifs with negative contribution scores
   if (neg_patterns) {
