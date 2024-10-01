@@ -1,4 +1,27 @@
 # create custom motif class ====================================================
+# validation function
+check_modisco_motif <- function(object) {
+  errors <- character()
+  # check that PPM and CWM have same dimensions
+  ppm_dim <- dim(object@PPM)
+  cwm_dim <- dim(object@CWM)
+  
+  if (!all(ppm_dim == cwm_dim)) {
+    msg <- paste("PPM and CWM matrices should have same dimensions")
+    errors <- c(errors, msg)
+  }
+  
+  # check that length of motif consensus matches PPM and CWM columns
+  consensus_length <- nchar(object@consensus)
+  
+  if (consensus_length != ncol(object@PPM) | consensus_length != ncol(object@CWM)) {
+    msg <- paste("number of characters for motif_consensus must match n columns for PPM and CWM matrices")
+    errors <- c(errors, msg)
+  }
+  
+  if (length(errors) == 0) TRUE else errors
+}
+
 modisco_motif <- setClass("modisco_motif",
                            
                            slots = list(
@@ -7,7 +30,9 @@ modisco_motif <- setClass("modisco_motif",
                              consensus = "character",
                              PPM = "matrix",
                              CWM = "matrix"
-                           )
+                           ), 
+                          
+                          validity = check_modisco_motif
 )
 
 setGeneric("motif_name", function(x) standardGeneric("motif_name"))
@@ -24,6 +49,19 @@ setMethod("motif_ppm", "modisco_motif", function(x) x@PPM)
 
 setGeneric("motif_cwm", function(x) standardGeneric("motif_cwm"))
 setMethod("motif_cwm", "modisco_motif", function(x) x@CWM)
+
+# function to convert motif to universalmotif format ===========================
+# converts modisco_motif obbject to universalmotif PPM object
+modisco_to_universalmotif <- function(motif) {
+  um_ppm <- create_motif(
+    motif@PPM, 
+    type = "PPM", 
+    nsites = motif@n_seqlets, 
+    name = motif@name
+  )
+  
+  return(um_ppm)
+}
 
 # function to trim motif =======================================================
 # removes flanking bases with low information content
@@ -165,7 +203,7 @@ modisco_list_to_df <- function(modisco_list) {
   return(motif_df)
 }
 
-# function to get reverse complement of motif
+# function to get reverse complement of motif ==================================
 modisco_motif_rc <- function(motif) {
   require(Biostrings)
   # check that object class is modisco_motif
@@ -258,4 +296,136 @@ modisco_summary_table <- function(modisco_table, temp_dir = tempdir()) {
   }
   
   return(summary_table)
+}
+
+# get average contribution score for motifs ====================================
+# given a granges and a bigwig file, return the average contribution score across all motifs
+add_contr_scores <- function(gr, bw, score_colname = "average_contribution_score") {
+  # check that all motifs are of equal width
+  motif_width_range <- range(width(gr))
+  if (motif_width_range[1] != motif_width_range[2]) {stop("All provided motifs must be the same size")}
+  
+  # define function to extract matrix from bigwig file
+  extract_matrix <- function(track, gr, size, ignore_strand) {
+    sum <- suppressWarnings(.Call(
+      'BWGFile_summary', path.expand(path(track)),
+      as.character(seqnames(gr)), ranges(gr), 
+      S4Vectors::recycleIntegerArg(size, "size", length(gr)), 
+      "mean", as.numeric(NA_real_), PACKAGE='rtracklayer'
+    ))
+    M <- do.call( rbind, sum )
+    if (!ignore_strand) 
+      M[as.character(strand(gr))=='-',] <- M[
+        as.character(strand(gr))=='-', ncol(M):1]
+    return(M)
+  }
+  
+  # extract matrix of contribution scores
+  bwf <- BigWigFile(bw)
+  score_matrix <- extract_matrix(bwf, gr, max(width(gr)), ignore_strand = FALSE)
+  
+  # add contribution scores to granges
+  mcols(gr)[score_colname] <- rowMeans(score_matrix)
+  
+  # return modified granges
+  return(gr)
+}
+
+# write motifs to modified modisco h5 format ===================================
+# this function is intended to prepare motifs for finemo
+# Motifs are written in a limited h5 format with only the CWM and PPM
+# If motifs are of different lengths, motifs can be optionally padded with 0 values to make them equal length for finemo
+
+pad_motif <- function(modisco_list) {
+  # check input data type
+  list_class <- class(modisco_list[[1]])
+  if (list_class != "modisco_motif") {stop("provided object is not a list of modisco_motif objects")}
+  
+  # get length of longest motif
+  longest_motif_length <- modisco_list |> 
+    purrr::map(motif_consensus) |> 
+    nchar() |> 
+    max()
+  
+  # iterate over motifs and pad shorter motifs with 0 values
+  for (i in seq(modisco_list)) {
+    i_motif <- modisco_list[[i]]
+    motif_length <- nchar(motif_consensus(i_motif))
+    
+    # get number of bases to pad on each side
+    if (motif_length < longest_motif_length) {
+      length_diff <- longest_motif_length - motif_length
+      if (length_diff %% 2 == 0) {
+        n_left <- length_diff / 2
+        n_right <- length_diff / 2
+      } else {
+        
+        n_left <- floor(length_diff / 2)
+        n_right <- ceiling(length_diff / 2)
+      }
+      
+      # generate columns for padding
+      left_cols <- matrix(
+        data = 0, 
+        nrow = 4, 
+        ncol = n_left, 
+        dimnames = list(
+          c("A", "C", "G", "T"),
+          rep("N", times = n_left)
+        )
+        )
+      
+      right_cols <- matrix(
+        data = 0, 
+        nrow = 4, 
+        ncol = n_right, 
+        dimnames = list(
+          c("A", "C", "G", "T"),
+          rep("N", times = n_right)
+        )
+      )
+      
+      # generate padded motif
+      padded_motif <- modisco_motif(
+        name = i_motif@name, 
+        n_seqlets = i_motif@n_seqlets, 
+        consensus = paste0(str_dup("N", n_left), i_motif@consensus, str_dup("N", n_right),  collapse = ""),
+        PPM = cbind(left_cols, i_motif@PPM, right_cols), 
+        CWM = cbind(left_cols, i_motif@CWM, right_cols)
+      )
+      
+      modisco_list[[i]] <- padded_motif
+    }
+  }
+  
+  return(modisco_list)
+}
+
+write_modisco_h5 <- function(modisco_list, out_file) {
+  require(rhdf5)
+  
+  # check input data type
+  list_class <- class(modisco_list[[1]])
+  
+  if (list_class != "modisco_motif") {stop("provided object is not a list of modisco_motif objects")}
+  
+  # initialise output list
+  out_list <- list()
+  
+  # write motifs to list
+  for (i in seq(modisco_list)) {
+    i_motif <- modisco_list[[i]]
+    i_name <- motif_name(i_motif)
+    h5_name <- paste0(i_name, "_", (i - 1))
+    
+    out_list[[h5_name]] <- list()
+    out_list[[h5_name]]$sequence <- motif_ppm(i_motif)
+    out_list[[h5_name]]$contrib_scores <- motif_cwm(i_motif)
+    
+    
+  }
+  
+  if (file.exists(out_file)) {stop("output h5 file already exists")}
+  
+  h5write(out_list, out_file, name = "pos_patterns")
 }
