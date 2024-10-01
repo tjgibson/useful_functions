@@ -200,9 +200,6 @@ peak_adj_matrix <- function(peaks, mat_type = "n", ...) {
     stop("one or more peak set is not a Granges object. peaks must be a GRangesList")
   }
   
-  if (!is_integer(min_overlap)) {
-    stop("min_overlap must be an integer")
-  }
   
   if (!any(mat_type == c("n", "percent"))) {
     stop("Invalid mat_type provided. mat_type should be 'n' or 'percent' ")
