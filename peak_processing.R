@@ -171,40 +171,12 @@ filter_by_replicates <- function(peaks, method = "overlap", min_overlap = 1L) {
 
 
 # function to plot the cumulative distribution function for a set of peaks
-# takes as input a character vector of paths to MACS2 output files files (e.g. macs2_peaks.xls)
-# if the elements of the character vector are named, these names will be used to label the plot. If not, the filename will be used.
-read_macs2 <- function(files) {
-  # check input file
-  if (any(!file.exists(files))) {
-    stop("one or more input files not found")
-  }
-  
-  
-  # set sample names
-  if(is.null(names(files))) {
-    names(files) <- str_replace(basename(files), ".xls", "")
-  }
-  
-  # import peak files 
-  all_peaks <- files %>%
-    map(read_tsv, comment = "#") %>%
-    bind_rows(.id = "sample")
-  
-  return(all_peaks)
-}
-
-plot_peak_ECDF <- function(in_files, return_plot = FALSE) {
+# takes as input a Grangeslist object
+plot_peak_ECDF <- function(peaks, return_plot = FALSE) {
   require(tidyverse)
-  # check input file
-  if (any(!file.exists(in_files))) {
-    stop("one or more input files not found")
-  }
-  
-  # import peak files
-  all_peaks <- read_macs2(in_files)
-  
+
   # plot ECDF function
-  p <- all_peaks %>%
+  p <- peaks %>%
     ggplot(aes(log2(fold_enrichment), color = sample)) + 
     stat_ecdf() 
   
@@ -218,7 +190,7 @@ plot_peak_ECDF <- function(in_files, return_plot = FALSE) {
 # peaks should be a GrangesList object containing multiple peak sets to compare
 # min_overlap should be an integer specifying the minimum overlap in bp to consider two peaks as overlapping
 # type should be 'n' or 'percent' and specify whether the values in the adjacency matrix should be number of peaks or percentages
-peak_adj_matrix <- function(peaks, min_overlap = 1L, type = "n") {
+peak_adj_matrix <- function(peaks, mat_type = "n", ...) {
   # check arguments
   if (length(peaks) < 2) {
     stop("Only one set of peaks provided. For merging peaks, provide multiple peak sets.")
@@ -232,8 +204,8 @@ peak_adj_matrix <- function(peaks, min_overlap = 1L, type = "n") {
     stop("min_overlap must be an integer")
   }
   
-  if (!any(type == c("n", "percent"))) {
-    stop("Invalid type provided. type should be 'n' or 'percent' ")
+  if (!any(mat_type == c("n", "percent"))) {
+    stop("Invalid mat_type provided. mat_type should be 'n' or 'percent' ")
   }
   
   # build adjacency matrix
@@ -248,8 +220,8 @@ peak_adj_matrix <- function(peaks, min_overlap = 1L, type = "n") {
       i.gr <- peaks[[i]]
       j.gr <- peaks[[j]]
       
-      n_overlapping <- length(subsetByOverlaps(i.gr, j.gr, minoverlap = min_overlap))
-      p_overlapping <- length(subsetByOverlaps(i.gr, j.gr, minoverlap = min_overlap)) / length(i.gr)
+      n_overlapping <- length(subsetByOverlaps(i.gr, j.gr, ...))
+      p_overlapping <- length(subsetByOverlaps(i.gr, j.gr, ...)) / length(i.gr)
       
       overlap_table_n[i,j] <- n_overlapping
       overlap_table_p[i,j] <- p_overlapping
@@ -258,11 +230,11 @@ peak_adj_matrix <- function(peaks, min_overlap = 1L, type = "n") {
     
   }
   # return adjacency matrix
-  if (type == "n") {
+  if (mat_type == "n") {
     return(overlap_table_n)
   }
   
-  if (type == "percent") {
+  if (mat_type == "percent") {
     return(overlap_table_p)
   }
 }
