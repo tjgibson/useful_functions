@@ -365,8 +365,8 @@ pad_motif <- function(modisco_list) {
       }
       
       # generate columns for padding
-      left_cols <- matrix(
-        data = 0, 
+      ppm_left_cols <- matrix(
+        data = 0.25, 
         nrow = 4, 
         ncol = n_left, 
         dimnames = list(
@@ -375,7 +375,27 @@ pad_motif <- function(modisco_list) {
         )
         )
       
-      right_cols <- matrix(
+      ppm_right_cols <- matrix(
+        data = 0.25, 
+        nrow = 4, 
+        ncol = n_right, 
+        dimnames = list(
+          c("A", "C", "G", "T"),
+          rep("N", times = n_right)
+        )
+      )
+      
+      cwm_left_cols <- matrix(
+        data = 0, 
+        nrow = 4, 
+        ncol = n_left, 
+        dimnames = list(
+          c("A", "C", "G", "T"),
+          rep("N", times = n_left)
+        )
+      )
+      
+      cwm_right_cols <- matrix(
         data = 0, 
         nrow = 4, 
         ncol = n_right, 
@@ -390,8 +410,8 @@ pad_motif <- function(modisco_list) {
         name = i_motif@name, 
         n_seqlets = i_motif@n_seqlets, 
         consensus = paste0(str_dup("N", n_left), i_motif@consensus, str_dup("N", n_right),  collapse = ""),
-        PPM = cbind(left_cols, i_motif@PPM, right_cols), 
-        CWM = cbind(left_cols, i_motif@CWM, right_cols)
+        PPM = cbind(ppm_left_cols, i_motif@PPM, ppm_right_cols), 
+        CWM = cbind(cwm_left_cols, i_motif@CWM, cwm_right_cols)
       )
       
       modisco_list[[i]] <- padded_motif

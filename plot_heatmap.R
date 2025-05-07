@@ -424,7 +424,9 @@ plot_average <- function(
     upstream = 1000, downstream = 1000, region_width = 1,
     row_split = NULL,
     colors = NULL,
-    summary_fun = mean
+    summary_fun = mean,
+    line_width = 1,
+    center_label = "center"
 ) {
   
   require(rtracklayer)
@@ -471,35 +473,58 @@ plot_average <- function(
     as.data.frame() %>% 
     tibble()
   
-  # add column with row groupings
-  coverage_tb$group <- row_split
-  
-  # compute average signal within groups
-  coverage_tb <- coverage_tb %>% 
-    group_by(group) %>% 
-    summarise(across(.fns = summary_fun))
-  
-  # set column names
-  colnames(coverage_tb)[2:ncol(coverage_tb)] <- 1:(ncol(coverage_tb) - 1)
-  
-  # reformat tibble for ggplot
-  coverage_tb <- coverage_tb %>% 
-    pivot_longer(2:ncol(coverage_tb), names_to = "position", values_to = "signal") %>% 
-    mutate(position = as.integer(position))
-  
+  if (!is.null(row_split)) {
+    # add column with row groupings
+    coverage_tb$group <- row_split
+    
+    # compute average signal within groups
+    coverage_tb <- coverage_tb %>% 
+      group_by(group) %>% 
+      summarise(across(.fns = summary_fun))
+    
+    # set column names
+    colnames(coverage_tb)[2:ncol(coverage_tb)] <- 1:(ncol(coverage_tb) - 1)
+    
+    
+    # reformat tibble for ggplot
+    coverage_tb <- coverage_tb %>% 
+      pivot_longer(2:ncol(coverage_tb), names_to = "position", values_to = "signal") %>% 
+      mutate(position = as.integer(position))
+    
+    # initialise plot
+    p <- coverage_tb %>% 
+      ggplot(aes(x = position, y = signal, color = group)) + geom_line(lwd = line_width * 2)
+    
+  } else {
+    # compute average signal within groups
+    coverage_tb <- coverage_tb %>% 
+      summarise(across(.fns = summary_fun))
+    
+    # set column names
+    colnames(coverage_tb) <- 1:(ncol(coverage_tb))
+    
+    
+    # reformat tibble for ggplot
+    coverage_tb <- coverage_tb %>% 
+      pivot_longer(1:ncol(coverage_tb), names_to = "position", values_to = "signal") %>% 
+      mutate(position = as.integer(position))
+    
+    # initialise plot
+    p <- coverage_tb %>% 
+      ggplot(aes(x = position, y = signal)) + geom_line(lwd = line_width * 2)
+  }
   # get position start and stop for axis labels
   start <- min(coverage_tb$position)
   end <- max(coverage_tb$position)
   
   # generate plot
-  p <- coverage_tb %>% 
-    ggplot(aes(x = position, y = signal, color = group)) + geom_line(lwd = 2) +
+  p <- p +
     coord_cartesian(clip = "off") +
-    viridis::scale_color_viridis(discrete=TRUE) +
+    # viridis::scale_color_viridis(discrete=TRUE) +
     theme(text = element_text(size = 16),
-          panel.border = element_rect(color = "black", fill=NA, size=1),
-          axis.ticks = element_line(colour = "black", size = 1),
-          axis.ticks.length=unit(.2, "cm"),
+          panel.border = element_rect(color = "black", fill=NA, size=line_width),
+          axis.ticks = element_line(colour = "black", size = line_width),
+          axis.ticks.length=unit(line_width / 5, "cm"),
           panel.background = element_blank(),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank(),
@@ -508,12 +533,296 @@ plot_average <- function(
     scale_x_continuous(
       
       breaks = c(start,end/2,end), 
-      labels = c(paste0("-", upstream / 1000, "KB"),"center", paste0("+", upstream / 1000, "KB")),
+      labels = c(paste0("-", upstream / 1000, "KB"),center_label, paste0("+", upstream / 1000, "KB")),
       expand = c(0,0,0,0)
-      ) 
+    ) 
   
   # return plot
   return(p)
   
 }
+
+# modified version of metaplot function for adding metaplots to heatmaps in plotgardener
+matrix_metaplot <- function(
+    hm_matrix,
+    row_split = NULL,
+    upstream,
+    downstream,
+    colors = null,
+    summary_fun = mean,
+    line_width = 1,
+    center_label = "center"
+) {
+  require(tidyverse)
+  
+  
+  
+  # convert coverage matrix to tibble
+  coverage_tb <- hm_matrix  |>  
+    as.data.frame()  |>  
+    tibble()
+  
+  if (!is.null(row_split)) {
+    # add column with row groupings
+    coverage_tb$group <- row_split
+    
+    # compute average signal within groups
+    coverage_tb <- coverage_tb |> 
+      group_by(group) |> 
+      summarise(across(everything(),.fns = summary_fun))
+    
+    # set column names
+    colnames(coverage_tb)[2:ncol(coverage_tb)] <- 1:(ncol(coverage_tb) - 1)
+    
+    
+    # reformat tibble for ggplot
+    coverage_tb <- coverage_tb  |>  
+      pivot_longer(2:ncol(coverage_tb), names_to = "position", values_to = "signal")  |>  
+      mutate(position = as.integer(position))
+    
+    # initialise plot
+    p <- coverage_tb |> 
+      ggplot(aes(x = position, y = signal, color = group)) + geom_line(linewidth = line_width * 2)
+    
+  } else {
+    # compute average signal within groups
+    coverage_tb <- coverage_tb |> 
+      summarise(across(.fns = summary_fun))
+    
+    # set column names
+    colnames(coverage_tb) <- 1:(ncol(coverage_tb))
+    
+    
+    # reformat tibble for ggplot
+    coverage_tb <- coverage_tb |> 
+      pivot_longer(1:ncol(coverage_tb), names_to = "position", values_to = "signal") |> 
+      mutate(position = as.integer(position))
+    
+    # initialise plot
+    p <- coverage_tb |> 
+      ggplot(aes(x = position, y = signal)) + geom_line(linewidth = line_width * 2)
+  }
+  # get position start and stop for axis labels
+  start <- min(coverage_tb$position)
+  end <- max(coverage_tb$position)
+  
+  # generate plot
+  p <- p +
+    coord_cartesian(clip = "off") +
+    # viridis::scale_color_viridis(discrete=TRUE) +
+    theme(text = element_text(size = 16),
+          panel.border = element_rect(color = "black", fill=NA, size=line_width),
+          axis.ticks = element_line(colour = "black", size = line_width),
+          axis.ticks.length=unit(line_width / 5, "cm"),
+          panel.background = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.title.x = element_blank()
+    ) + 
+    scale_x_continuous(
+      
+      breaks = c(start,end/2,end), 
+      labels = c(paste0("-", upstream / 1000, "KB"),center_label, paste0("+", downstream / 1000, "KB")),
+      expand = c(0,0,0,0)
+    ) 
+  
+  
+  # return plot
+  return(p)
+  
+}
+
+# function for generating figure quality heatmaps with plotgardener
+pg_heatmap <- function(
+    hm_list, 
+    x, 
+    y, 
+    height, 
+    width, 
+    default.units = "cm",
+    gap = 0.2, 
+    hm_upstream,
+    hm_downstream,
+    row_split,
+    add_metaplots = FALSE, 
+    metaplot_height = NULL,
+    metaplot_palette = NULL,
+    metaplot_range = NULL,
+    metaplot_gap = 0.2
+) {
+
+  # initialize object to store plot information
+  pg_hm_object <- list(
+    x = x,
+    y = y,
+    height = height,
+    width = width,
+    elements = list()
+  )
+  
+  # get number of heatmaps
+  n_heatmaps <- length(hm_list)
+  n_groups <- hm_list@ht_list[[1]]@matrix_param$row_split |> 
+    unique() |> 
+    nrow()
+  
+  # get width for individual heatmaps
+  hm_width = (width - (gap * (n_heatmaps - 1))) / n_heatmaps
+  
+  # get plotting area for heatmaps
+  if (add_metaplots) {
+    hm_top <- y + metaplot_height + metaplot_gap
+    hm_height <- height - metaplot_height - metaplot_gap
+  } else {
+    hm_top <- y
+    hm_height <-  height
+  }
+  
+  # plot heatmaps and add plotting information to output object
+  for (i in seq(n_heatmaps)) {
+    # add heatmaps
+    hm_name <- paste0("heatmap_", i)
+    i_hm <- hm_list@ht_list[[i]]
+    i_hm_gr <-  grid.grabExpr(draw(i_hm, padding = unit(c(0, 0, 0, 0), "mm")))
+    
+    x_offset <- (i - 1) * (hm_width + gap)
+    
+    pg_hm_object$elements[[hm_name]] <- list(
+      x = x + x_offset,
+      y = hm_top,
+      width = hm_width,
+      height = hm_height
+    )
+    
+    plotGG(
+      plot = i_hm_gr,
+      x = pg_hm_object$elements[[hm_name]]$x, 
+      y = pg_hm_object$elements[[hm_name]]$y,
+      width = pg_hm_object$elements[[hm_name]]$width, 
+      height = pg_hm_object$elements[[hm_name]]$height, 
+      just = c("left", "top"),
+      default.units = default.units
+    )
+    
+    # add metaplots
+    if (add_metaplots) {
+      mp_name <- paste0("metaplot_", i)
+      
+      pg_hm_object$elements[[mp_name]] <- list(
+        x = x + x_offset,
+        y = y,
+        width = hm_width,
+        height = metaplot_height
+      )
+      
+      mp <- matrix_metaplot(
+        i_hm@matrix, 
+        row_split = row_split, 
+        upstream = hm_upstream, 
+        downstream = hm_downstream, 
+        colors = metaplot_colors, 
+        summary_fun = mean,
+        line_width = 0.2
+      ) + 
+        theme(text = element_text(size = 5),
+              line = element_line(size = 0.1),
+              axis.title.y = element_blank(),
+              legend.key.size = unit(2, 'mm')) +
+        scale_color_brewer(palette = metaplot_palette) 
+      
+      if (!is.null(metaplot_range)) {
+        mp <- mp +
+          ylim(metaplot_range)
+      }
+      
+      # extract y-axis and plot
+      if (is.null(metaplot_range)) {
+      mp_yax <- cowplot::get_y_axis(mp)
+      
+      mp_yax_width <- mp_yax$width
+      
+      plotGG(
+        plot = mp_yax, 
+        x = pg_hm_object$elements[[mp_name]]$x, 
+        y = pg_hm_object$elements[[mp_name]]$y, 
+        width = mp_yax_width, 
+        height = pg_hm_object$elements[[mp_name]]$height, 
+        just = c("top", "right"), 
+        default.units = default.units
+      )
+      
+      }
+      
+      # extract y-axis and legend from first plot
+      if (i == 1) {
+        if (!is.null(metaplot_range)) {
+          pg_hm_object$elements$mp_yaxis <- cowplot::get_y_axis(mp)
+        }
+        
+        pg_hm_object$elements$mp_legend <- cowplot::get_legend(mp)
+      }
+      
+      mp <- mp +
+        theme(
+          legend.position = "none",
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.ticks.length.y = unit(0, "cm"),
+          plot.margin=grid::unit(c(0,0,0,0), "mm")
+        ) 
+      
+      plotGG(
+        plot = mp,
+        x = pg_hm_object$elements[[mp_name]]$x, 
+        y = pg_hm_object$elements[[mp_name]]$y,
+        width = pg_hm_object$elements[[mp_name]]$width, 
+        height = pg_hm_object$elements[[mp_name]]$height, 
+        just = c("left", "top"),
+        default.units = default.units
+      )
+      
+    }
+  }
+  # add x axis to first heatmap
+  vp_name <- paste0(hm_list@ht_list[[1]]@name, "_heatmap_body_", n_groups, "_1")
+  seekViewport(name = vp_name)
+  grid.xaxis(at = c(0,0.5,1), label = c(paste0("-", hm_upstream / 1000, "KB"),"summit", paste0("+",hm_downstream / 1000, "KB")), gp = gpar(lwd = 0.5, fontsize = 5))
+  seekViewport(name = "page")
+  
+  # add y-axis to first metaplot
+  if (!is.null(metaplot_range)) {
+  yax_width <- pg_hm_object$elements$mp_yaxis$width
+  plotGG(
+    plot = pg_hm_object$elements$mp_yaxis, 
+    x = pg_hm_object$elements$metaplot_1$x, 
+    y = pg_hm_object$elements$metaplot_1$y, 
+    width = yax_width, 
+    height = pg_hm_object$elements$metaplot_1$height, 
+    just = c("top", "right"), 
+    default.units = default.units
+  )
+  }
+  
+  return(pg_hm_object)
+}
+
+# function to add colorbar to heatamp
+add_colorbar <- function(plot, heatmap, ...) {
+  require(plotgardener)
+  # extract color scale from heatmap matrix
+  hm_colors <-  colorRampPalette(heatmap@matrix_color_mapping@colors)
+  
+  # extract color breaks from heatmap matrix
+  color_breaks <- heatmap@matrix_color_mapping@levels
+  color_range <- range(color_breaks)
+  
+  # add required fields to plot object
+  plot$color_palette <- hm_colors
+  plot$zrange <- color_range
+  
+  # add colorbar to heatmap
+  annoHeatmapLegend(plot, ...)
+  
+}
+
 
